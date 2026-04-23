@@ -30,6 +30,16 @@ A **Kotlin Multiplatform** SDK for [PostHog](https://posthog.com) analytics, sup
 | JS (Browser) | ✅ | posthog-js (native) |
 | Wasm (Browser) | ✅ | posthog-js (native) |
 
+### Feature Flag API Parity
+
+| Platform | `getAllFeatureFlags()` | `overrideFeatureFlags()` | `getFeatureFlagResult().reason` |
+|----------|------------------------|---------------------------|----------------------------------|
+| Android | ✅ Cached observed + override values | ✅ KMP local override map | ✅ `LOCALLY_OVERRIDDEN` / `MATCHED` / `DISABLED` / `ERROR` |
+| iOS | ✅ Cached observed + override values | ✅ KMP local override map | ✅ `LOCALLY_OVERRIDDEN` / `MATCHED` / `DISABLED` / `ERROR` |
+| Wasm (Browser) | ✅ From `posthog-js` `getAllFlags()` + overrides | ✅ `posthog-js` + KMP local override tracking | ✅ `LOCALLY_OVERRIDDEN` / `MATCHED` / `DISABLED` / `ERROR` |
+| JVM | ⚠️ Best-effort (HTTP-backed cache) | ✅ Local override map | ⚠️ Best-effort |
+| macOS | ⚠️ Stub implementation | ⚠️ Stub implementation | ⚠️ Stub implementation |
+
 ## Installation
 
 ### Gradle (Kotlin DSL)
@@ -429,6 +439,7 @@ PostHog.close()
 - Automatic lifecycle tracking
 - Deep link capture
 - Logcat capture support
+- `getAllFeatureFlags()` returns the in-memory set of observed and locally overridden flags
 
 ### iOS
 - Uses official PostHog iOS SDK (3.38.0+) via Swift bridge
@@ -438,6 +449,7 @@ PostHog.close()
   - Autocapture
   - Native networking and caching
   - Network telemetry capture
+- `getAllFeatureFlags()` returns the in-memory set of observed and locally overridden flags
 
 ### macOS
 - Currently stub implementation
@@ -448,6 +460,7 @@ PostHog.close()
 - Suitable for server-side Kotlin applications
 - Coroutine-based async operations
 - Periodic flush with configurable intervals
+- Feature-flag API is best-effort and optimized for server-side use, not full native parity
 
 ### JS/Wasm
 - Wraps official posthog-js library (1.328.0+)
@@ -455,6 +468,7 @@ PostHog.close()
 - Session recording available
 - LocalStorage persistence
 - Autocapture support
+- Wasm `getAllFeatureFlags()` is mapped from `posthog-js` `getAllFlags()` and merged with local overrides
 
 ## Contributing
 

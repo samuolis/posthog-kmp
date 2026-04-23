@@ -91,3 +91,8 @@ public data class SessionRecordingConfig(
     val captureLogcat: Boolean = false,
     val debouncerDelayMs: Long = 500L
 )
+
+public data class SurveysConfig(
+    val enabled: Boolean = true,
+    val showAfterDelay: Int = 0
+)

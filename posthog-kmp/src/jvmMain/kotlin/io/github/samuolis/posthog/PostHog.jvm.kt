@@ -29,7 +29,6 @@ private var sessionId: String? = null
 private val superProperties = ConcurrentHashMap<String, Any?>()
 private val eventQueue = CopyOnWriteArrayList<PostHogJvmEvent>()
 private val featureFlags = ConcurrentHashMap<String, Any?>()
-private val featureFlagOverrides = ConcurrentHashMap<String, Any?>()
 private var isOptedOut = false
 private var httpClient: HttpClient? = null
 private var flushJob: Job? = null
@@ -139,7 +138,6 @@ internal actual fun platformReset() {
     distinctId = anonymousId
     superProperties.clear()
     featureFlags.clear()
-    featureFlagOverrides.clear()
 }
 
 internal actual fun platformGetDistinctId(): String? {
@@ -176,14 +174,6 @@ internal actual fun platformGroup(
 }
 
 internal actual fun platformIsFeatureEnabled(key: String, defaultValue: Boolean): Boolean {
-    featureFlagOverrides[key]?.let { override ->
-        return when (override) {
-            is Boolean -> override
-            is String -> override.lowercase() == "true"
-            else -> defaultValue
-        }
-    }
-
     return when (val flag = featureFlags[key]) {
         is Boolean -> flag
         is String -> flag.lowercase() != "false"
@@ -193,15 +183,11 @@ internal actual fun platformIsFeatureEnabled(key: String, defaultValue: Boolean)
 }
 
 internal actual fun platformGetFeatureFlag(key: String): Any? {
-    return featureFlagOverrides[key] ?: featureFlags[key]
+    return featureFlags[key]
 }
 
 internal actual fun platformGetFeatureFlagPayload(key: String): Any? {
     return featureFlags["${key}_payload"]
-}
-
-internal actual fun platformGetAllFeatureFlags(): Map<String, Any?> {
-    return featureFlagOverrides + featureFlags
 }
 
 internal actual fun platformReloadFeatureFlags(callback: (() -> Unit)?) {
@@ -211,26 +197,12 @@ internal actual fun platformReloadFeatureFlags(callback: (() -> Unit)?) {
     }
 }
 
-internal actual fun platformOverrideFeatureFlags(flags: Map<String, Any?>) {
-    featureFlagOverrides.putAll(flags)
-}
-
-internal actual fun platformGetFeatureFlagResult(key: String): FeatureFlagResult {
-    val value = featureFlagOverrides[key] ?: featureFlags[key]
-    val payload = featureFlags["${key}_payload"]
-
-    val reason = when {
-        featureFlagOverrides.containsKey(key) -> FeatureFlagReason.LOCALLY_OVERRIDDEN
-        value != null -> FeatureFlagReason.MATCHED
-        else -> FeatureFlagReason.DISABLED
+internal actual fun platformSetPersonProperties(properties: Map<String, Any?>?, propertiesSetOnce: Map<String, Any?>?) {
+    val props = buildMap<String, Any?> {
+        properties?.let { put("\$set", it) }
+        propertiesSetOnce?.let { put("\$set_once", it) }
     }
-
-    return FeatureFlagResult(
-        key = key,
-        value = value,
-        payload = payload,
-        reason = reason
-    )
+    if (props.isNotEmpty()) platformCapture("\$set", props)
 }
 
 internal actual fun platformGetAnonymousId(): String? {
@@ -271,7 +243,6 @@ internal actual fun platformClose() {
     superProperties.clear()
     eventQueue.clear()
     featureFlags.clear()
-    featureFlagOverrides.clear()
 }
 
 internal actual fun platformSetDebug(enabled: Boolean) {

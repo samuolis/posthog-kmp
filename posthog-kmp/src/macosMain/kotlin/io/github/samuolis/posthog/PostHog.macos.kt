@@ -91,26 +91,11 @@ internal actual fun platformGetFeatureFlagPayload(key: String): Any? {
     return null
 }
 
-internal actual fun platformGetAllFeatureFlags(): Map<String, Any?> {
-    return emptyMap()
-}
-
 internal actual fun platformReloadFeatureFlags(callback: (() -> Unit)?) {
     callback?.invoke()
 }
 
-internal actual fun platformOverrideFeatureFlags(flags: Map<String, Any?>) {
-    // Not implemented
-}
-
-internal actual fun platformGetFeatureFlagResult(key: String): FeatureFlagResult {
-    return FeatureFlagResult(
-        key = key,
-        value = null,
-        reason = FeatureFlagReason.ERROR,
-        errorCode = FeatureFlagErrorCode.INVALID_CONFIG
-    )
-}
+internal actual fun platformSetPersonProperties(properties: Map<String, Any?>?, propertiesSetOnce: Map<String, Any?>?) {}
 
 internal actual fun platformGetAnonymousId(): String? {
     return null

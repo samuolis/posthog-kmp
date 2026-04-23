@@ -1,12 +1,12 @@
 package io.github.samuolis.posthog
 
-/**
- * WebAssembly JavaScript implementation using the official posthog-js library.
- *
- * This implementation uses Kotlin/Wasm JS interop to wrap the posthog-js npm package.
- */
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
-// External declarations for WasmJS interop
 @OptIn(ExperimentalWasmJsInterop::class)
 private external interface PostHogJsApi {
     fun init(apiKey: String, options: JsAny)
@@ -20,10 +20,8 @@ private external interface PostHogJsApi {
     fun isFeatureEnabled(key: String): Boolean
     fun getFeatureFlag(key: String): JsAny?
     fun getFeatureFlagPayload(key: String): JsAny?
-    fun getAllFlags(): JsAny?
     fun reloadFeatureFlags()
     fun onFeatureFlags(callback: () -> Unit)
-    fun overrideFeatureFlags(flags: JsAny)
     fun opt_out_capturing()
     fun opt_in_capturing()
     fun has_opted_out_capturing(): Boolean
@@ -40,7 +38,6 @@ private external interface PostHogJsApi {
 @JsName("default")
 private external val PostHogWasm: PostHogJsApi
 
-// Window interface for setTimeout
 @OptIn(ExperimentalWasmJsInterop::class)
 private external interface Window {
     fun setTimeout(callback: () -> Unit, delay: Int)
@@ -49,7 +46,6 @@ private external interface Window {
 @OptIn(ExperimentalWasmJsInterop::class)
 private external val window: Window
 
-// Navigator interface for online status
 @OptIn(ExperimentalWasmJsInterop::class)
 private external interface Navigator {
     val onLine: Boolean
@@ -60,6 +56,10 @@ private external val navigator: Navigator
 
 private var isPostHogInitialized = false
 private var currentConfig: PostHogConfig? = null
+private val wasmJson = Json {
+    ignoreUnknownKeys = true
+    isLenient = true
+}
 
 @Suppress("UNUSED_PARAMETER")
 @OptIn(ExperimentalWasmJsInterop::class)
@@ -82,7 +82,6 @@ internal actual fun platformSetup(config: PostHogConfig, context: PostHogContext
 internal actual fun platformCapture(event: String, properties: Map<String, Any?>?) {
     if (!isPostHogInitialized || !isOnline()) return
 
-    // Defer to avoid blocking main thread
     window.setTimeout({
         try {
             if (properties != null) {
@@ -90,9 +89,7 @@ internal actual fun platformCapture(event: String, properties: Map<String, Any?>
             } else {
                 PostHogWasm.capture(event)
             }
-        } catch (_: Throwable) {
-            // Silently ignore
-        }
+        } catch (_: Throwable) {}
     }, 0)
 }
 
@@ -107,9 +104,7 @@ internal actual fun platformScreen(screenName: String, properties: Map<String, A
                 properties?.forEach { (key, value) -> put(key, value) }
             }
             PostHogWasm.capture("\$screen", screenProperties.toJsObject())
-        } catch (_: Throwable) {
-            // Silently ignore
-        }
+        } catch (_: Throwable) {}
     }, 0)
 }
 
@@ -128,38 +123,29 @@ internal actual fun platformIdentify(
             } else {
                 PostHogWasm.identify(distinctId)
             }
-        } catch (_: Throwable) {
-            // Silently ignore
-        }
+        } catch (_: Throwable) {}
     }, 0)
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
 internal actual fun platformAlias(alias: String) {
     if (!isPostHogInitialized) return
-
     try {
         PostHogWasm.alias(alias)
-    } catch (_: Throwable) {
-        // Silently ignore
-    }
+    } catch (_: Throwable) {}
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
 internal actual fun platformReset() {
     if (!isPostHogInitialized) return
-
     try {
         PostHogWasm.reset(true)
-    } catch (_: Throwable) {
-        // Silently ignore
-    }
+    } catch (_: Throwable) {}
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
 internal actual fun platformGetDistinctId(): String? {
     if (!isPostHogInitialized) return null
-
     return try {
         PostHogWasm.getDistinctId()
     } catch (_: Throwable) {
@@ -170,50 +156,36 @@ internal actual fun platformGetDistinctId(): String? {
 @OptIn(ExperimentalWasmJsInterop::class)
 internal actual fun platformRegister(key: String, value: Any?) {
     if (!isPostHogInitialized) return
-
     try {
         val props = createJsObject()
         setJsProperty(props, key, value.toJsAny())
         PostHogWasm.register(props)
-    } catch (_: Throwable) {
-        // Silently ignore
-    }
+    } catch (_: Throwable) {}
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
 internal actual fun platformUnregister(key: String) {
     if (!isPostHogInitialized) return
-
     try {
         PostHogWasm.unregister(key)
-    } catch (_: Throwable) {
-        // Silently ignore
-    }
+    } catch (_: Throwable) {}
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
-internal actual fun platformGroup(
-    type: String,
-    key: String,
-    groupProperties: Map<String, Any?>?
-) {
+internal actual fun platformGroup(type: String, key: String, groupProperties: Map<String, Any?>?) {
     if (!isPostHogInitialized) return
-
     try {
         if (groupProperties != null) {
             PostHogWasm.group(type, key, groupProperties.toJsObject())
         } else {
             PostHogWasm.group(type, key)
         }
-    } catch (_: Throwable) {
-        // Silently ignore
-    }
+    } catch (_: Throwable) {}
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
 internal actual fun platformIsFeatureEnabled(key: String, defaultValue: Boolean): Boolean {
     if (!isPostHogInitialized) return defaultValue
-
     return try {
         PostHogWasm.isFeatureEnabled(key)
     } catch (_: Throwable) {
@@ -224,9 +196,8 @@ internal actual fun platformIsFeatureEnabled(key: String, defaultValue: Boolean)
 @OptIn(ExperimentalWasmJsInterop::class)
 internal actual fun platformGetFeatureFlag(key: String): Any? {
     if (!isPostHogInitialized) return null
-
     return try {
-        PostHogWasm.getFeatureFlag(key)
+        jsAnyToKotlin(PostHogWasm.getFeatureFlag(key))
     } catch (_: Throwable) {
         null
     }
@@ -235,24 +206,10 @@ internal actual fun platformGetFeatureFlag(key: String): Any? {
 @OptIn(ExperimentalWasmJsInterop::class)
 internal actual fun platformGetFeatureFlagPayload(key: String): Any? {
     if (!isPostHogInitialized) return null
-
     return try {
-        PostHogWasm.getFeatureFlagPayload(key)
+        jsAnyToKotlin(PostHogWasm.getFeatureFlagPayload(key))
     } catch (_: Throwable) {
         null
-    }
-}
-
-@OptIn(ExperimentalWasmJsInterop::class)
-internal actual fun platformGetAllFeatureFlags(): Map<String, Any?> {
-    if (!isPostHogInitialized) return emptyMap()
-
-    return try {
-        // WasmJS interop for maps is complex, returning empty for now
-        // Users should use getFeatureFlag for specific flags
-        emptyMap()
-    } catch (_: Throwable) {
-        emptyMap()
     }
 }
 
@@ -262,7 +219,6 @@ internal actual fun platformReloadFeatureFlags(callback: (() -> Unit)?) {
         callback?.invoke()
         return
     }
-
     try {
         if (callback != null) {
             PostHogWasm.onFeatureFlags { callback() }
@@ -274,51 +230,21 @@ internal actual fun platformReloadFeatureFlags(callback: (() -> Unit)?) {
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
-internal actual fun platformOverrideFeatureFlags(flags: Map<String, Any?>) {
-    if (!isPostHogInitialized) return
-
-    try {
-        PostHogWasm.overrideFeatureFlags(flags.toJsObject())
-    } catch (_: Throwable) {
-        // Silently ignore
-    }
+internal actual fun platformSetPersonProperties(properties: Map<String, Any?>?, propertiesSetOnce: Map<String, Any?>?) {
+    if (!isPostHogInitialized || (properties == null && propertiesSetOnce == null)) return
+    window.setTimeout({
+        try {
+            val props = buildMap<String, Any?> {
+                properties?.let { put("\$set", it) }
+                propertiesSetOnce?.let { put("\$set_once", it) }
+            }
+            PostHogWasm.capture("\$set", props.toJsObject())
+        } catch (_: Throwable) {}
+    }, 0)
 }
 
-@OptIn(ExperimentalWasmJsInterop::class)
-internal actual fun platformGetFeatureFlagResult(key: String): FeatureFlagResult {
-    if (!isPostHogInitialized) {
-        return FeatureFlagResult(
-            key = key,
-            value = null,
-            reason = FeatureFlagReason.ERROR,
-            errorCode = FeatureFlagErrorCode.INVALID_CONFIG
-        )
-    }
-
-    return try {
-        val value = PostHogWasm.getFeatureFlag(key)
-        val payload = PostHogWasm.getFeatureFlagPayload(key)
-
-        FeatureFlagResult(
-            key = key,
-            value = value,
-            payload = payload,
-            reason = if (value != null) FeatureFlagReason.MATCHED else FeatureFlagReason.DISABLED
-        )
-    } catch (_: Throwable) {
-        FeatureFlagResult(
-            key = key,
-            value = null,
-            reason = FeatureFlagReason.ERROR,
-            errorCode = FeatureFlagErrorCode.UNKNOWN
-        )
-    }
-}
-
-@OptIn(ExperimentalWasmJsInterop::class)
 internal actual fun platformGetAnonymousId(): String? {
     if (!isPostHogInitialized) return null
-
     return try {
         PostHogWasm.get_distinct_id()
     } catch (_: Throwable) {
@@ -329,7 +255,6 @@ internal actual fun platformGetAnonymousId(): String? {
 @OptIn(ExperimentalWasmJsInterop::class)
 internal actual fun platformGetSessionId(): String? {
     if (!isPostHogInitialized) return null
-
     return try {
         PostHogWasm.get_session_id()
     } catch (_: Throwable) {
@@ -340,29 +265,22 @@ internal actual fun platformGetSessionId(): String? {
 @OptIn(ExperimentalWasmJsInterop::class)
 internal actual fun platformOptOut() {
     if (!isPostHogInitialized) return
-
     try {
         PostHogWasm.opt_out_capturing()
-    } catch (_: Throwable) {
-        // Silently ignore
-    }
+    } catch (_: Throwable) {}
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
 internal actual fun platformOptIn() {
     if (!isPostHogInitialized) return
-
     try {
         PostHogWasm.opt_in_capturing()
-    } catch (_: Throwable) {
-        // Silently ignore
-    }
+    } catch (_: Throwable) {}
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
 internal actual fun platformIsOptedOut(): Boolean {
     if (!isPostHogInitialized) return false
-
     return try {
         PostHogWasm.has_opted_out_capturing()
     } catch (_: Throwable) {
@@ -373,47 +291,34 @@ internal actual fun platformIsOptedOut(): Boolean {
 @OptIn(ExperimentalWasmJsInterop::class)
 internal actual fun platformFlush() {
     if (!isPostHogInitialized) return
-
     try {
         PostHogWasm.flush()
-    } catch (_: Throwable) {
-        // Silently ignore
-    }
+    } catch (_: Throwable) {}
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
 internal actual fun platformClose() {
     if (!isPostHogInitialized) return
-
     try {
         PostHogWasm.shutdown()
         isPostHogInitialized = false
         currentConfig = null
-    } catch (_: Throwable) {
-        // Silently ignore
-    }
+    } catch (_: Throwable) {}
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
 internal actual fun platformSetDebug(enabled: Boolean) {
     if (!isPostHogInitialized) return
-
     try {
         PostHogWasm.debug(enabled)
-    } catch (_: Throwable) {
-        // Silently ignore
-    }
+    } catch (_: Throwable) {}
 }
 
-// ==================== Helper Functions ====================
+// ==================== Helpers ====================
 
 @OptIn(ExperimentalWasmJsInterop::class)
 private fun isOnline(): Boolean {
-    return try {
-        navigator.onLine
-    } catch (_: Throwable) {
-        true // Assume online if we can't check
-    }
+    return try { navigator.onLine } catch (_: Throwable) { true }
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
@@ -425,47 +330,52 @@ private fun setJsProperty(obj: JsAny, key: String, value: JsAny?) {
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
-private fun Any?.toJsAny(): JsAny? {
-    return when (this) {
-        null -> null
-        is String -> this.toJsString()
-        is Int -> this.toJsNumber()
-        is Long -> this.toDouble().toJsNumber()
-        is Double -> this.toJsNumber()
-        is Float -> this.toDouble().toJsNumber()
-        is Boolean -> this.toJsBoolean()
-        is Map<*, *> -> (this as Map<String, Any?>).toJsObject()
-        else -> this.toString().toJsString()
-    }
+private fun Any?.toJsAny(): JsAny? = when (this) {
+    null -> null
+    is String -> toJsStringHelper(this)
+    is Int -> toJsNumberHelper(this.toDouble())
+    is Long -> toJsNumberHelper(this.toDouble())
+    is Double -> toJsNumberHelper(this)
+    is Float -> toJsNumberHelper(this.toDouble())
+    is Boolean -> toJsBooleanHelper(this)
+    is Map<*, *> -> @Suppress("UNCHECKED_CAST") (this as Map<String, Any?>).toJsObject()
+    else -> toJsStringHelper(this.toString())
 }
 
 @OptIn(ExperimentalWasmJsInterop::class)
 private fun Map<String, Any?>.toJsObject(): JsAny {
     val result = createJsObject()
-    this.forEach { (key, value) ->
-        setJsProperty(result, key, value.toJsAny())
-    }
+    forEach { (key, value) -> setJsProperty(result, key, value.toJsAny()) }
     return result
 }
-
-// Helper functions for WasmJS primitives
-@OptIn(ExperimentalWasmJsInterop::class)
-private fun Int.toJsNumber(): JsAny = toJsNumberHelper(this.toDouble())
-
-@OptIn(ExperimentalWasmJsInterop::class)
-private fun Double.toJsNumber(): JsAny = toJsNumberHelper(this)
 
 @OptIn(ExperimentalWasmJsInterop::class)
 private fun toJsNumberHelper(value: Double): JsAny = js("value")
 
 @OptIn(ExperimentalWasmJsInterop::class)
-private fun Boolean.toJsBoolean(): JsAny = toJsBooleanHelper(this)
-
-@OptIn(ExperimentalWasmJsInterop::class)
 private fun toJsBooleanHelper(value: Boolean): JsAny = js("value")
 
 @OptIn(ExperimentalWasmJsInterop::class)
-private fun String.toJsString(): JsAny = toJsStringHelper(this)
+private fun toJsStringHelper(value: String): JsAny = js("value")
 
 @OptIn(ExperimentalWasmJsInterop::class)
-private fun toJsStringHelper(value: String): JsAny = js("value")
+private fun jsStringify(value: JsAny?): String? = js("value == null ? null : JSON.stringify(value)")
+
+@OptIn(ExperimentalWasmJsInterop::class)
+private fun jsAnyToKotlin(value: JsAny?): Any? {
+    val jsonString = runCatching { jsStringify(value) }.getOrNull() ?: return null
+    val jsonElement = runCatching { wasmJson.parseToJsonElement(jsonString) }.getOrNull() ?: return null
+    return jsonElementToKotlin(jsonElement)
+}
+
+private fun jsonElementToKotlin(element: JsonElement): Any? = when (element) {
+    JsonNull -> null
+    is JsonObject -> element.mapValues { (_, value) -> jsonElementToKotlin(value) }
+    is JsonArray -> element.map { jsonElementToKotlin(it) }
+    is JsonPrimitive -> when {
+        element.isString -> element.content
+        element.content.equals("true", ignoreCase = true) -> true
+        element.content.equals("false", ignoreCase = true) -> false
+        else -> element.content.toLongOrNull() ?: element.content.toDoubleOrNull() ?: element.content
+    }
+}

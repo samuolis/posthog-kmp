@@ -5,16 +5,6 @@ package io.github.samuolis.posthog
 import PostHogBridge.PostHogBridge
 import kotlinx.cinterop.ExperimentalForeignApi
 
-/**
- * iOS implementation using the native PostHog iOS SDK via Swift bridge.
- *
- * This implementation provides full access to native PostHog features including:
- * - Session recording
- * - Surveys
- * - Autocapture
- * - Native networking and caching
- */
-
 private var currentConfig: PostHogConfig? = null
 
 @Suppress("UNUSED_PARAMETER")
@@ -83,26 +73,20 @@ internal actual fun platformGetDistinctId(): String? {
 }
 
 internal actual fun platformRegister(key: String, value: Any?) {
-    value?.let {
-        PostHogBridge.shared().registerWithKey(key, value = it)
-    }
+    value?.let { PostHogBridge.shared().registerWithKey(key, value = it) }
 }
 
 internal actual fun platformUnregister(key: String) {
     PostHogBridge.shared().unregisterWithKey(key)
 }
 
-internal actual fun platformGroup(
-    type: String,
-    key: String,
-    groupProperties: Map<String, Any?>?
-) {
+internal actual fun platformGroup(type: String, key: String, groupProperties: Map<String, Any?>?) {
     @Suppress("UNCHECKED_CAST")
     PostHogBridge.shared().groupWithType(type, key = key, groupProperties = groupProperties as? Map<Any?, *>)
 }
 
 internal actual fun platformIsFeatureEnabled(key: String, defaultValue: Boolean): Boolean {
-    return PostHogBridge.shared().isFeatureEnabled(key)
+    return runCatching { PostHogBridge.shared().isFeatureEnabled(key) }.getOrDefault(defaultValue)
 }
 
 internal actual fun platformGetFeatureFlag(key: String): Any? {
@@ -113,35 +97,22 @@ internal actual fun platformGetFeatureFlagPayload(key: String): Any? {
     return PostHogBridge.shared().getFeatureFlagPayload(key)
 }
 
-internal actual fun platformGetAllFeatureFlags(): Map<String, Any?> {
-    // Not available in PostHog iOS SDK - return empty map
-    return emptyMap()
-}
-
 internal actual fun platformReloadFeatureFlags(callback: (() -> Unit)?) {
     if (callback != null) {
-        PostHogBridge.shared().reloadFeatureFlagsWithCallbackWithCallback {
-            callback()
-        }
+        PostHogBridge.shared().reloadFeatureFlagsWithCallbackWithCallback { callback() }
     } else {
         PostHogBridge.shared().reloadFeatureFlags()
     }
 }
 
-internal actual fun platformOverrideFeatureFlags(flags: Map<String, Any?>) {
-    // Not available in PostHog iOS SDK
-}
-
-internal actual fun platformGetFeatureFlagResult(key: String): FeatureFlagResult {
-    val value = PostHogBridge.shared().getFeatureFlag(key)
-    val payload = PostHogBridge.shared().getFeatureFlagPayload(key)
-
-    return FeatureFlagResult(
-        key = key,
-        value = value,
-        payload = payload,
-        reason = if (value != null) FeatureFlagReason.MATCHED else FeatureFlagReason.DISABLED
-    )
+internal actual fun platformSetPersonProperties(properties: Map<String, Any?>?, propertiesSetOnce: Map<String, Any?>?) {
+    if (properties == null && propertiesSetOnce == null) return
+    val props = buildMap<String, Any?> {
+        properties?.let { put("\$set", it) }
+        propertiesSetOnce?.let { put("\$set_once", it) }
+    }
+    @Suppress("UNCHECKED_CAST")
+    PostHogBridge.shared().captureWithEvent("\$set", properties = props as? Map<Any?, *>)
 }
 
 internal actual fun platformGetAnonymousId(): String? {

@@ -231,18 +231,6 @@ internal actual fun platformGetFeatureFlagPayload(key: String): Any? {
     }
 }
 
-internal actual fun platformGetAllFeatureFlags(): Map<String, Any?> {
-    if (!isPostHogInitialized) return emptyMap()
-
-    return try {
-        val flags = PostHogJs.getAllFlags()
-        flags.unsafeCast<Map<String, Any?>>()
-    } catch (e: Throwable) {
-        logDebug("getAllFeatureFlags error: ${e.message}")
-        emptyMap()
-    }
-}
-
 internal actual fun platformReloadFeatureFlags(callback: (() -> Unit)?) {
     if (!isPostHogInitialized) {
         callback?.invoke()
@@ -260,44 +248,15 @@ internal actual fun platformReloadFeatureFlags(callback: (() -> Unit)?) {
     }
 }
 
-internal actual fun platformOverrideFeatureFlags(flags: Map<String, Any?>) {
+internal actual fun platformSetPersonProperties(properties: Map<String, Any?>?, propertiesSetOnce: Map<String, Any?>?) {
     if (!isPostHogInitialized) return
-
     try {
-        PostHogJs.overrideFeatureFlags(flags.toJsObject())
+        val props = js("{}")
+        properties?.let { props["\$set"] = it.toJsObject() }
+        propertiesSetOnce?.let { props["\$set_once"] = it.toJsObject() }
+        PostHogJs.capture("\$set", props)
     } catch (e: Throwable) {
-        logDebug("overrideFeatureFlags error: ${e.message}")
-    }
-}
-
-internal actual fun platformGetFeatureFlagResult(key: String): FeatureFlagResult {
-    if (!isPostHogInitialized) {
-        return FeatureFlagResult(
-            key = key,
-            value = null,
-            reason = FeatureFlagReason.ERROR,
-            errorCode = FeatureFlagErrorCode.INVALID_CONFIG
-        )
-    }
-
-    return try {
-        val value = PostHogJs.getFeatureFlag(key)
-        val payload = PostHogJs.getFeatureFlagPayload(key)
-
-        FeatureFlagResult(
-            key = key,
-            value = value,
-            payload = payload,
-            reason = if (value != null) FeatureFlagReason.MATCHED else FeatureFlagReason.DISABLED
-        )
-    } catch (e: Throwable) {
-        logDebug("getFeatureFlagResult error: ${e.message}")
-        FeatureFlagResult(
-            key = key,
-            value = null,
-            reason = FeatureFlagReason.ERROR,
-            errorCode = FeatureFlagErrorCode.UNKNOWN
-        )
+        logDebug("setPersonProperties error: ${e.message}")
     }
 }
 

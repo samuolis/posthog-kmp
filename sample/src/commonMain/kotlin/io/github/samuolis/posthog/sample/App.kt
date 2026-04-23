@@ -23,6 +23,7 @@ import io.github.samuolis.posthog.PostHogContext
 fun App(postHogContext: PostHogContext) {
     var isInitialized by remember { mutableStateOf(false) }
     var apiKey by remember { mutableStateOf("") }
+    var useEuHost by remember { mutableStateOf(false) }
     var eventName by remember { mutableStateOf("button_clicked") }
     var userId by remember { mutableStateOf("") }
     var featureFlagKey by remember { mutableStateOf("") }
@@ -80,12 +81,22 @@ fun App(postHogContext: PostHogContext) {
                     singleLine = true
                 )
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Host: ${if (useEuHost) "EU (eu.i.posthog.com)" else "US (us.i.posthog.com)"}")
+                    Switch(checked = useEuHost, onCheckedChange = { useEuHost = it })
+                }
+
                 Button(
                     onClick = {
                         if (apiKey.isNotBlank()) {
                             PostHog.setup(
                                 config = PostHogConfig(
                                     apiKey = apiKey,
+                                    host = if (useEuHost) PostHogConfig.HOST_EU else PostHogConfig.HOST_US,
                                     debug = true
                                 ),
                                 context = postHogContext

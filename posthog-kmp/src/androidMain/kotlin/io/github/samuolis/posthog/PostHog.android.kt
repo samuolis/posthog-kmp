@@ -8,22 +8,11 @@ import com.posthog.android.replay.PostHogSessionReplayConfig
 
 private var postHogInstance: PostHogInterface? = null
 
-/**
- * Set the Android application context before calling PostHog.setup().
- *
- * @deprecated Use PostHog.setup(config, PostHogContext(application)) instead
- * to avoid storing context statically.
- *
- * @param context The Android Application context
- */
 @Deprecated(
     message = "Use PostHog.setup(config, PostHogContext(application)) instead",
     replaceWith = ReplaceWith("PostHog.setup(config, PostHogContext(context))")
 )
-public fun PostHog.setApplicationContext(context: Application) {
-    // No-op - kept for backwards compatibility
-    // Users should migrate to setup(config, PostHogContext(application))
-}
+public fun PostHog.setApplicationContext(context: Application) {}
 
 internal actual fun platformSetup(config: PostHogConfig, context: PostHogContext) {
     val androidConfig = PostHogAndroidConfig(
@@ -36,15 +25,12 @@ internal actual fun platformSetup(config: PostHogConfig, context: PostHogContext
         captureDeepLinks = config.captureDeepLinks
         sendFeatureFlagEvent = config.sendFeatureFlagEvent
         preloadFeatureFlags = config.preloadFeatureFlags
-
         flushAt = config.flushAt
         flushIntervalSeconds = config.flushIntervalSeconds
         maxQueueSize = config.maxQueueSize
         maxBatchSize = config.maxBatchSize
-
         optOut = config.optOut
 
-        // Session replay configuration
         config.sessionRecording?.let { sessionConfig ->
             sessionReplay = sessionConfig.enabled
             sessionReplayConfig = PostHogSessionReplayConfig(
@@ -61,17 +47,11 @@ internal actual fun platformSetup(config: PostHogConfig, context: PostHogContext
 }
 
 internal actual fun platformCapture(event: String, properties: Map<String, Any?>?) {
-    postHogInstance?.capture(
-        event = event,
-        properties = properties?.toPostHogProperties()
-    )
+    postHogInstance?.capture(event = event, properties = properties?.toPostHogProperties())
 }
 
 internal actual fun platformScreen(screenName: String, properties: Map<String, Any?>?) {
-    postHogInstance?.screen(
-        screenTitle = screenName,
-        properties = properties?.toPostHogProperties()
-    )
+    postHogInstance?.screen(screenTitle = screenName, properties = properties?.toPostHogProperties())
 }
 
 internal actual fun platformIdentify(
@@ -106,11 +86,7 @@ internal actual fun platformUnregister(key: String) {
     postHogInstance?.unregister(key)
 }
 
-internal actual fun platformGroup(
-    type: String,
-    key: String,
-    groupProperties: Map<String, Any?>?
-) {
+internal actual fun platformGroup(type: String, key: String, groupProperties: Map<String, Any?>?) {
     postHogInstance?.group(
         type = type,
         key = key,
@@ -130,38 +106,27 @@ internal actual fun platformGetFeatureFlagPayload(key: String): Any? {
     return postHogInstance?.getFeatureFlagPayload(key)
 }
 
-internal actual fun platformGetAllFeatureFlags(): Map<String, Any?> {
-    // Not available in PostHog Android SDK - use getFeatureFlag for individual flags
-    return emptyMap()
-}
-
 internal actual fun platformReloadFeatureFlags(callback: (() -> Unit)?) {
+    val instance = postHogInstance
+    if (instance == null) {
+        callback?.invoke()
+        return
+    }
     if (callback != null) {
-        postHogInstance?.reloadFeatureFlags { callback() }
+        instance.reloadFeatureFlags { callback() }
     } else {
-        postHogInstance?.reloadFeatureFlags()
+        instance.reloadFeatureFlags()
     }
 }
 
-internal actual fun platformOverrideFeatureFlags(flags: Map<String, Any?>) {
-    // Not available in PostHog Android SDK
-}
-
-internal actual fun platformGetFeatureFlagResult(key: String): FeatureFlagResult {
-    val value = postHogInstance?.getFeatureFlag(key)
-    val payload = postHogInstance?.getFeatureFlagPayload(key)
-
-    return FeatureFlagResult(
-        key = key,
-        value = value,
-        payload = payload,
-        reason = if (value != null) FeatureFlagReason.MATCHED else FeatureFlagReason.DISABLED
+internal actual fun platformSetPersonProperties(properties: Map<String, Any?>?, propertiesSetOnce: Map<String, Any?>?) {
+    postHogInstance?.setPersonProperties(
+        userPropertiesToSet = properties?.toPostHogProperties(),
+        userPropertiesToSetOnce = propertiesSetOnce?.toPostHogProperties()
     )
 }
 
 internal actual fun platformGetAnonymousId(): String? {
-    // In PostHog Android SDK, the anonymous ID is the distinct ID when not identified
-    // There's no separate getAnonymousId method, so we return the distinctId
     return postHogInstance?.distinctId()
 }
 
@@ -194,7 +159,6 @@ internal actual fun platformSetDebug(enabled: Boolean) {
     postHogInstance?.debug(enabled)
 }
 
-// Helper to convert nullable values to non-null map expected by PostHog
 private fun Map<String, Any?>.toPostHogProperties(): Map<String, Any> {
-    return this.filterValues { it != null }.mapValues { it.value!! }
+    return filterValues { it != null }.mapValues { it.value!! }
 }
