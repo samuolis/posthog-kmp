@@ -9,6 +9,9 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
+import kotlinx.serialization.*
+import kotlinx.serialization.descriptors.*
+import kotlinx.serialization.encoding.*
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.*
@@ -91,6 +94,7 @@ internal actual fun platformCapture(event: String, properties: Map<String, Any?>
             scope.launch { flushEvents() }
         }
     }
+    println("PosthogAnalyticsManager platformCapture: Sent event $event $eventProperties")
 }
 
 internal actual fun platformScreen(screenName: String, properties: Map<String, Any?>?) {
@@ -273,14 +277,16 @@ private suspend fun flushEvents() {
         "batch" to batch
     )
 
+    val requestBody = json.encodeToString(mapSerializer, body)
+
     try {
         val response = client.post("${cfg.host}/batch") {
             contentType(ContentType.Application.Json)
-            setBody(json.encodeToString(mapSerializer, body))
+            setBody(requestBody)
         }
 
         if (cfg.debug) {
-            println("[PostHog] Flushed ${eventsToSend.size} events: ${response.status}")
+            println("[PostHog] Flushed ${eventsToSend.size} events: ${response.status}\n${if (!response.status.isSuccess()) requestBody+"\n"+response else ""}")
         }
     } catch (e: Exception) {
         if (cfg.debug) {
@@ -347,5 +353,58 @@ private fun getCurrentISOTimestamp(): String {
     return DateTimeFormatter.ISO_INSTANT.format(Instant.now())
 }
 
-// Simple map serializer for the body
-private val mapSerializer = kotlinx.serialization.serializer<Map<String, Any?>>()
+// Custom serializer for Map<String, Any?>
+@OptIn(ExperimentalSerializationApi::class)
+private object MapStringAnySerializer : KSerializer<Map<String, Any?>> {
+    override val descriptor: SerialDescriptor = buildClassSerialDescriptor("MapStringAny")
+
+    private fun Any?.toJsonElement(): JsonElement = when (this) {
+        null -> JsonNull
+        is String -> JsonPrimitive(this)
+        is Number -> JsonPrimitive(this)
+        is Boolean -> JsonPrimitive(this)
+        is List<*> -> buildJsonArray {
+            this@toJsonElement.forEach { item ->
+                add(item.toJsonElement())
+            }
+        }
+        is Map<*, *> -> buildJsonObject {
+            this@toJsonElement.forEach { (key, value) ->
+                put(key.toString(), value.toJsonElement())
+            }
+        }
+        else -> JsonPrimitive(this.toString())
+    }
+
+    override fun serialize(encoder: Encoder, value: Map<String, Any?>) {
+        val jsonObject = buildJsonObject {
+            value.forEach { (key, v) ->
+                put(key, v.toJsonElement())
+            }
+        }
+        encoder.encodeSerializableValue(JsonObject.serializer(), jsonObject)
+    }
+
+    override fun deserialize(decoder: Decoder): Map<String, Any?> {
+        // For PostHog we mainly need serialization, but provide basic deserialization
+        val jsonObject = decoder.decodeSerializableValue(JsonObject.serializer())
+        return jsonObject.mapValues { (_, v) ->
+            when (v) {
+                is JsonPrimitive -> when {
+                    v.isString -> v.content
+                    v.booleanOrNull != null -> v.boolean
+                    v.intOrNull != null -> v.int
+                    v.longOrNull != null -> v.long
+                    v.floatOrNull != null -> v.float
+                    v.doubleOrNull != null -> v.double
+                    else -> v.content
+                }
+                is JsonNull -> null
+                else -> v.toString()
+            }
+        }
+    }
+}
+
+// Custom map serializer for the body
+private val mapSerializer = MapStringAnySerializer
