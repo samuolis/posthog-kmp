@@ -433,7 +433,7 @@ PostHog.close()
 ## Platform-Specific Notes
 
 ### Android
-- Uses official PostHog Android SDK (`posthog-android` 3.30.0+)
+- Uses official PostHog Android SDK (`posthog-android` 3.51.1+)
 - Requires `PostHogContext(application)` with Application context
 - Session recording with wireframe or screenshot mode
 - Automatic lifecycle tracking
@@ -442,7 +442,7 @@ PostHog.close()
 - `getAllFeatureFlags()` returns the in-memory set of observed and locally overridden flags
 
 ### iOS
-- Uses official PostHog iOS SDK (3.38.0+) via Swift bridge
+- Uses official PostHog iOS SDK (3.59.3+) via Swift bridge
 - Full native SDK features including:
   - Session recording (wireframe or screenshot mode)
   - Surveys (iOS 15+)
@@ -463,7 +463,7 @@ PostHog.close()
 - Feature-flag API is best-effort and optimized for server-side use, not full native parity
 
 ### JS/Wasm
-- Wraps official posthog-js library (1.328.0+)
+- Wraps official posthog-js library (1.393.4+)
 - Full browser feature support
 - Session recording available
 - LocalStorage persistence
